@@ -8,11 +8,17 @@ import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.Utils;
 import com.ctre.phoenix6.swerve.SwerveDrivetrain;
 import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
+import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveModuleConstants;
 import com.ctre.phoenix6.swerve.SwerveRequest;
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.config.PIDConstants;
+import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -22,12 +28,15 @@ import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import frc.robot.generated.TunerConstants;
 
-/**
+/**.
  * Class that extends the Phoenix 6 SwerveDrivetrain class and implements
  * Subsystem so it can easily be used in command-based projects.
  */
 public class CommandSwerveDrivetrain extends SwerveDrivetrain implements Subsystem {
+    private final SwerveRequest.RobotCentric autoRequest = new SwerveRequest.RobotCentric();
+    //private final SwerveRequest.RobotCentric robotCentricDrive = new SwerveRequest.RobotCentric();
     private static final double kSimLoopPeriod = 0.005; // 5 ms
     private Notifier m_simNotifier = null;
     private double m_lastSimTime;
@@ -168,6 +177,64 @@ public class CommandSwerveDrivetrain extends SwerveDrivetrain implements Subsyst
         }
     }
 
+
+
+
+
+
+ private void configurePathPlanner() {
+
+
+    // Load the RobotConfig from the GUI settings. You should probably
+    // store this in your Constants file
+    RobotConfig config;
+    try{
+      config = RobotConfig.fromGUISettings();
+    } catch (Exception e) {
+      // Handle exception as needed
+      e.printStackTrace();
+    }
+/////////////////////NEEDS WORK
+
+        // Configure AutoBuilder last
+    AutoBuilder.configure(
+            ()->this.getState().Pose, //Robot pose supplier
+            
+            
+            this::resetPose, // Method to reset odometry (will be called if your auto has a starting pose)
+            ()->this.getKinematics().toChassisSpeeds(),
+            
+            (speeds)->this.setControl(autoRequest.withVelocityX(speeds.vxMetersPerSecond).withVelocityY(speeds.vyMetersPerSecond).withRotationalRate(speeds.omegaRadiansPerSecond).
+            withDriveRequestType(DriveRequestType.Velocity), // Consumer of ChassisSpeeds to drive the robot
+
+            //(speeds, feedforwards) -> xdriveRobotRelative(speeds), // Method that will drive the robot given ROBOT RELATIVE ChassisSpeeds. Also optionally outputs individual module feedforwards
+            new PPHolonomicDriveController( // PPHolonomicController is the built in path following controller for holonomic drive trains
+                    new PIDConstants(5.0, 0.0, 0.0), // Translation PID constants
+                    new PIDConstants(5.0, 0.0, 0.0) // Rotation PID constants
+            ),
+            config, // The robot configuration
+            () -> {
+              // Boolean supplier that controls when the path will be mirrored for the red alliance
+              // This will flip the path being followed to the red side of the field.
+              // THE ORIGIN WILL REMAIN ON THE BLUE SIDE
+
+              var alliance = DriverStation.getAlliance();
+              if (alliance.isPresent()) {
+                return alliance.get() == DriverStation.Alliance.Red;
+              }
+              return false;
+            },
+            this // Reference to this subsystem to set requirements
+    );
+
+
+
+
+
+
+
+
+
     /**
      * Returns a command that applies the specified control request to this swerve drivetrain.
      *
@@ -235,4 +302,11 @@ public class CommandSwerveDrivetrain extends SwerveDrivetrain implements Subsyst
         });
         m_simNotifier.startPeriodic(kSimLoopPeriod);
     }
+
+
+        
+
+
+
+
 }
